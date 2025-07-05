@@ -1,0 +1,5 @@
+Django>=3.2,<4.0  # Or a more recent compatible version, let's start with a safe bet.
+djangorestframework>=3.12,<3.15
+djangorestframework-simplejwt>=5.0,<5.4
+psycopg2-binary>=2.9,<2.10
+django-cors-headers>=3.7,<4.4

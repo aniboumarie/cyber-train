@@ -37,17 +37,80 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    # Third-party apps
+    "rest_framework",
+    "rest_framework_simplejwt",
+    "corsheaders",
+    # Local apps
+    "api",
 ]
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
+    "corsheaders.middleware.CorsMiddleware",  # CORS middleware
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
+
+# Django REST Framework settings
+REST_FRAMEWORK = {
+    "DEFAULT_AUTHENTICATION_CLASSES": (
+        "rest_framework_simplejwt.authentication.JWTAuthentication",
+    )
+}
+
+# CORS settings - Allow all for development, restrict in production
+CORS_ALLOW_ALL_ORIGINS = True  # Or use CORS_ALLOWED_ORIGINS
+
+# Email backend for development (prints emails to console)
+EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
+
+# Define a default from email for system-generated emails
+DEFAULT_FROM_EMAIL = "noreply@cybertrain.com"
+
+# Define placeholder for frontend URL for email verification
+FRONTEND_VERIFY_EMAIL_URL = "http://localhost:5173/auth/verify-email/" # Adjust if your frontend runs elsewhere
+FRONTEND_PASSWORD_RESET_CONFIRM_URL = "http://localhost:5173/auth/reset-password/" # Adjust for frontend password reset confirm page
+
+# SIMPLE_JWT Settings
+from datetime import timedelta
+
+SIMPLE_JWT = {
+    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=60), # Default is 5 minutes
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=1),    # Default is 1 day
+    "ROTATE_REFRESH_TOKENS": False, # Default is False
+    "BLACKLIST_AFTER_ROTATION": False, # Default is False. Set to True if ROTATE_REFRESH_TOKENS is True
+    "UPDATE_LAST_LOGIN": True, # Default is False. Updates last_login field for user
+
+    "ALGORITHM": "HS256", # Default
+    "SIGNING_KEY": SECRET_KEY, # Default
+    "VERIFYING_KEY": None, # Default
+    "AUDIENCE": None, # Default
+    "ISSUER": None, # Default
+    "JWK_URL": None, # Default
+    "LEEWAY": 0, # Default
+
+    "AUTH_HEADER_TYPES": ("Bearer",), # Default
+    "AUTH_HEADER_NAME": "HTTP_AUTHORIZATION", # Default
+    "USER_ID_FIELD": "id", # Default
+    "USER_ID_CLAIM": "user_id", # Default
+    "USER_AUTHENTICATION_RULE": "rest_framework_simplejwt.authentication.default_user_authentication_rule", # Default
+
+    "AUTH_TOKEN_CLASSES": ("rest_framework_simplejwt.tokens.AccessToken",), # Default
+    "TOKEN_TYPE_CLAIM": "token_type", # Default
+    "TOKEN_USER_CLASS": "rest_framework_simplejwt.models.TokenUser", # Default
+
+    "JTI_CLAIM": "jti", # Default
+
+    "SLIDING_TOKEN_REFRESH_EXP_CLAIM": "refresh_exp", # Default
+    "SLIDING_TOKEN_LIFETIME": timedelta(minutes=5), # Default
+    "SLIDING_TOKEN_REFRESH_LIFETIME": timedelta(days=1), # Default
+}
+
 
 ROOT_URLCONF = "core.urls"
 
