@@ -50,7 +50,7 @@ export function AppSidebar() {
           <div className="w-8 h-8 bg-gradient-primary rounded-lg flex items-center justify-center flex-shrink-0">
             <span className="text-white font-bold text-lg">C</span>
           </div>
-          {!collapsed && <span className="text-xl font-bold text-foreground">CyberLearn</span>}
+          {state !== "collapsed" && <span className="text-xl font-bold text-foreground">CyberLearn</span>}
         </div>
       </div>
 
