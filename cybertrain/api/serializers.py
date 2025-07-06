@@ -139,3 +139,67 @@ class EnrolledCourseSerializer(serializers.Serializer):
         # if 'total_lessons_count' in self.initial_data and value > self.initial_data['total_lessons_count']:
         #     raise serializers.ValidationError("Completed lessons cannot exceed total lessons.")
         return value
+
+
+class UserUpdateSerializer(serializers.ModelSerializer):
+    # For updating first_name and last_name.
+    # Email and username changes are more complex and handled separately if needed.
+    first_name = serializers.CharField(max_length=150, required=False, allow_blank=True)
+    last_name = serializers.CharField(max_length=150, required=False, allow_blank=True)
+
+    class Meta:
+        model = User
+        fields = ('first_name', 'last_name')
+
+    def validate_first_name(self, value):
+        if len(value) > 0 and not value.isalpha(): # Example: Allow only letters if not blank
+            # This is a very basic validation, adjust as needed.
+            # Django User model's first_name doesn't have strict validation by default beyond length.
+            # raise serializers.ValidationError("First name should only contain letters.")
+            pass # Keeping it simple for now
+        return value
+
+    def validate_last_name(self, value):
+        if len(value) > 0 and not value.isalpha():
+            # raise serializers.ValidationError("Last name should only contain letters.")
+            pass # Keeping it simple for now
+        return value
+
+
+class PasswordChangeSerializer(serializers.Serializer):
+    old_password = serializers.CharField(required=True, write_only=True)
+    new_password1 = serializers.CharField(required=True, write_only=True, validators=[validate_password])
+    new_password2 = serializers.CharField(required=True, write_only=True)
+
+    def validate_old_password(self, value):
+        user = self.context['request'].user
+        if not user.check_password(value):
+            raise serializers.ValidationError("Your old password was entered incorrectly. Please enter it again.")
+        return value
+
+    def validate(self, data):
+        if data['new_password1'] != data['new_password2']:
+            raise serializers.ValidationError({"new_password2": "The two password fields didn't match."})
+
+        # validate_password from Django is already applied to new_password1 field by validators=[]
+        # but we can call it again here if we want to be extra sure or if we had complex cross-field validation.
+        # try:
+        #     validate_password(data['new_password1'], self.context['request'].user)
+        # except DjangoValidationError as e:
+        #     raise serializers.ValidationError({'new_password1': list(e.messages)})
+
+        if data['old_password'] == data['new_password1']:
+            raise serializers.ValidationError({"new_password1": "New password cannot be the same as the old password."})
+
+        return data
+
+    def save(self, **kwargs):
+        user = self.context['request'].user
+        user.set_password(self.validated_data['new_password1'])
+        user.save()
+        # Note: In Django, after changing a password, it's good practice to update the user's session
+        # to prevent them from being logged out if session identifiers are tied to the password hash.
+        # For DRF with token auth, this is less critical but still good to be aware of.
+        # from django.contrib.auth import update_session_auth_hash
+        # update_session_auth_hash(self.context['request'], user) # This is for session-based auth
+        return user

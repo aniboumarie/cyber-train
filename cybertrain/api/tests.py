@@ -570,6 +570,215 @@ class AuthTests(APITestCase):
         self.assertEqual(response.data['pagination']['count'], 0)
         self.assertEqual(len(response.data['results']), 0)
 
+    # --- User Profile Update Tests (CurrentUserView PUT/PATCH) ---
+    def test_update_user_profile_names_patch(self):
+        # Register, verify, and login 'testuser'
+        self.client.post(self.register_url, self.user_data, format='json')
+        user = get_latest_user()
+        user_profile = UserProfile.objects.get(user=user)
+        self.client.post(self.verify_email_url, {'token': str(user_profile.email_verification_token)}, format='json')
+        login_response = self.client.post(self.login_url, self.user_data_login, format='json')
+        access_token = login_response.data['access']
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {access_token}')
+
+        # Original names (can be blank from registration if not provided)
+        original_first_name = user.first_name
+        original_last_name = user.last_name
+
+        update_data = {
+            "first_name": "UpdatedFirst",
+            "last_name": "UpdatedLast"
+        }
+        response = self.client.patch(self.current_user_url, update_data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        # Check response data
+        self.assertEqual(response.data['first_name'], "UpdatedFirst")
+        self.assertEqual(response.data['last_name'], "UpdatedLast")
+        self.assertEqual(response.data['username'], self.user_data['username']) # Username shouldn't change
+        self.assertEqual(response.data['email'], self.user_data['email']) # Email shouldn't change
+
+        # Check database
+        user.refresh_from_db()
+        self.assertEqual(user.first_name, "UpdatedFirst")
+        self.assertEqual(user.last_name, "UpdatedLast")
+
+    def test_update_user_profile_single_name_patch(self):
+        self.client.post(self.register_url, self.user_data, format='json')
+        user = get_latest_user()
+        user_profile = UserProfile.objects.get(user=user) # Save original last name if any
+        original_last_name = user.last_name
+        self.client.post(self.verify_email_url, {'token': str(user_profile.email_verification_token)}, format='json')
+        login_response = self.client.post(self.login_url, self.user_data_login, format='json')
+        access_token = login_response.data['access']
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {access_token}')
+
+        update_data = {"first_name": "OnlyFirstUpdated"}
+        response = self.client.patch(self.current_user_url, update_data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['first_name'], "OnlyFirstUpdated")
+        self.assertEqual(response.data['last_name'], original_last_name) # Last name should remain unchanged
+
+        user.refresh_from_db()
+        self.assertEqual(user.first_name, "OnlyFirstUpdated")
+        self.assertEqual(user.last_name, original_last_name)
+
+    def test_update_user_profile_put_requires_all_fields_of_serializer(self):
+        # Note: UserUpdateSerializer only has first_name, last_name.
+        # So PUT would update these two, potentially blanking one if not provided.
+        self.client.post(self.register_url, self.user_data, format='json')
+        user = get_latest_user()
+        user_profile = UserProfile.objects.get(user=user)
+        self.client.post(self.verify_email_url, {'token': str(user_profile.email_verification_token)}, format='json')
+        login_response = self.client.post(self.login_url, self.user_data_login, format='json')
+        access_token = login_response.data['access']
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {access_token}')
+
+        update_data = {"first_name": "PutFirstName"} # Missing last_name for UserUpdateSerializer
+        response = self.client.put(self.current_user_url, update_data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['first_name'], "PutFirstName")
+        # With ModelSerializer, if a field is not required and not provided in PUT, it might be set to its default or blank
+        self.assertEqual(response.data['last_name'], "") # Assuming it blanks missing optional fields
+
+        user.refresh_from_db()
+        self.assertEqual(user.first_name, "PutFirstName")
+        self.assertEqual(user.last_name, "")
+
+
+    def test_update_user_profile_unauthenticated(self):
+        update_data = {"first_name": "ShouldNotUpdate"}
+        response = self.client.patch(self.current_user_url, update_data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_update_user_profile_cannot_change_username_or_email(self):
+        self.client.post(self.register_url, self.user_data, format='json')
+        user = get_latest_user()
+        user_profile = UserProfile.objects.get(user=user)
+        self.client.post(self.verify_email_url, {'token': str(user_profile.email_verification_token)}, format='json')
+        login_response = self.client.post(self.login_url, self.user_data_login, format='json')
+        access_token = login_response.data['access']
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {access_token}')
+
+        update_data = {
+            "username": "newusername", # Attempt to change username
+            "email": "newemail@example.com", # Attempt to change email
+            "first_name": "StillTest"
+        }
+        # UserUpdateSerializer only includes first_name and last_name, so username and email will be ignored.
+        response = self.client.patch(self.current_user_url, update_data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['username'], self.user_data['username']) # Should be original
+        self.assertEqual(response.data['email'], self.user_data['email'])       # Should be original
+        self.assertEqual(response.data['first_name'], "StillTest")
+
+        user.refresh_from_db()
+        self.assertEqual(user.username, self.user_data['username'])
+        self.assertEqual(user.email, self.user_data['email'])
+
+    # --- Password Change Tests ---
+    def _login_user_for_password_change(self):
+        # Helper to register, verify, and login 'testuser'
+        self.client.post(self.register_url, self.user_data, format='json')
+        user = get_latest_user()
+        user_profile = UserProfile.objects.get(user=user)
+        self.client.post(self.verify_email_url, {'token': str(user_profile.email_verification_token)}, format='json')
+        login_response = self.client.post(self.login_url, self.user_data_login, format='json')
+        access_token = login_response.data['access']
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {access_token}')
+        return user # Return the user object for password checking later
+
+    def test_password_change_success(self):
+        user = self._login_user_for_password_change()
+
+        password_change_url = reverse('auth-password-change')
+        new_password = "NewSecurePassword123$"
+        data = {
+            "old_password": self.user_data['password'],
+            "new_password1": new_password,
+            "new_password2": new_password
+        }
+        response = self.client.post(password_change_url, data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['message'], "Password changed successfully.")
+
+        user.refresh_from_db()
+        self.assertTrue(user.check_password(new_password))
+        # Ensure old password no longer works
+        self.assertFalse(user.check_password(self.user_data['password']))
+
+        # Try logging in with the new password
+        new_login_data = {'username': self.user_data['username'], 'password': new_password}
+        login_response_after_change = self.client.post(self.login_url, new_login_data, format='json')
+        self.assertEqual(login_response_after_change.status_code, status.HTTP_200_OK)
+
+
+    def test_password_change_wrong_old_password(self):
+        self._login_user_for_password_change()
+        password_change_url = reverse('auth-password-change')
+        data = {
+            "old_password": "WrongOldPassword!",
+            "new_password1": "NewSecurePassword123$",
+            "new_password2": "NewSecurePassword123$"
+        }
+        response = self.client.post(password_change_url, data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("old_password", response.data)
+        self.assertEqual(response.data["old_password"][0], "Your old password was entered incorrectly. Please enter it again.")
+
+    def test_password_change_new_passwords_mismatch(self):
+        self._login_user_for_password_change()
+        password_change_url = reverse('auth-password-change')
+        data = {
+            "old_password": self.user_data['password'],
+            "new_password1": "NewSecurePassword123$",
+            "new_password2": "DifferentNewPassword123$"
+        }
+        response = self.client.post(password_change_url, data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("new_password2", response.data)
+        self.assertEqual(response.data["new_password2"][0], "The two password fields didn't match.")
+
+    def test_password_change_new_password_same_as_old(self):
+        self._login_user_for_password_change()
+        password_change_url = reverse('auth-password-change')
+        data = {
+            "old_password": self.user_data['password'],
+            "new_password1": self.user_data['password'], # Same as old
+            "new_password2": self.user_data['password']  # Same as old
+        }
+        response = self.client.post(password_change_url, data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("new_password1", response.data)
+        self.assertEqual(response.data["new_password1"][0], "New password cannot be the same as the old password.")
+
+
+    def test_password_change_new_password_too_weak(self):
+        self._login_user_for_password_change()
+        password_change_url = reverse('auth-password-change')
+        data = {
+            "old_password": self.user_data['password'],
+            "new_password1": "weak",
+            "new_password2": "weak"
+        }
+        response = self.client.post(password_change_url, data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("new_password1", response.data) # Django's validate_password errors
+        # Example check, actual message might vary based on validators
+        self.assertTrue(any("too common" in error or "too short" in error for error in response.data["new_password1"]))
+
+
+    def test_password_change_unauthenticated(self):
+        password_change_url = reverse('auth-password-change')
+        data = {
+            "old_password": "any",
+            "new_password1": "NewSecurePassword123$",
+            "new_password2": "NewSecurePassword123$"
+        }
+        response = self.client.post(password_change_url, data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+
 ```python
 # Small correction for test_user_registration_existing_username and email error checking:
 # The serializer returns a list of error messages for a field.

@@ -12,7 +12,10 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.pagination import PageNumberPagination
 
-from .serializers import RegisterSerializer, UserSerializer, CourseSerializer, EnrolledCourseSerializer # Added EnrolledCourseSerializer
+from .serializers import (
+    RegisterSerializer, UserSerializer, CourseSerializer, EnrolledCourseSerializer,
+    UserUpdateSerializer, PasswordChangeSerializer # Added PasswordChangeSerializer
+)
 from .models import UserProfile
 
 # --- Mock Data Store ---
@@ -254,11 +257,37 @@ class EmailVerificationView(APIView):
 
 
 class CurrentUserView(generics.RetrieveAPIView):
-    serializer_class = UserSerializer
+    serializer_class = UserSerializer # Used for GET
     permission_classes = [permissions.IsAuthenticated]
 
     def get_object(self):
         return self.request.user
+
+    def get_serializer_class(self):
+        if self.request.method in ['PUT', 'PATCH']:
+            return UserUpdateSerializer
+        return super().get_serializer_class()
+
+    def update(self, request, *args, **kwargs):
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        self.perform_update(serializer)
+
+        # Return the full user representation after update
+        return Response(UserSerializer(instance, context=self.get_serializer_context()).data)
+
+    def perform_update(self, serializer):
+        serializer.save()
+
+    # Add put and patch methods to use the update logic
+    def put(self, request, *args, **kwargs):
+        return self.update(request, *args, **kwargs)
+
+    def patch(self, request, *args, **kwargs):
+        kwargs['partial'] = True
+        return self.update(request, *args, **kwargs)
 
 
 class PasswordResetRequestView(APIView):
@@ -657,3 +686,14 @@ class UserEnrolledCoursesView(APIView):
             },
             "results": serializer.data # This is what the frontend expects as 'results'
         }, status=status.HTTP_200_OK)
+
+
+class PasswordChangeView(generics.GenericAPIView):
+    serializer_class = PasswordChangeSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save() # The save method in serializer handles setting password and saving user
+        return Response({"message": "Password changed successfully."}, status=status.HTTP_200_OK)

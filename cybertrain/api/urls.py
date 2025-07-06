@@ -7,7 +7,8 @@ from .views import (
     PasswordResetConfirmView,
     DashboardOverviewView,
     CourseListView,
-    UserEnrolledCoursesView  # Added
+    UserEnrolledCoursesView,
+    PasswordChangeView  # Added
 )
 from rest_framework_simplejwt.views import (
     TokenObtainPairView,
@@ -30,4 +31,6 @@ urlpatterns = [
     path('courses/', CourseListView.as_view(), name='course-list'),
     # User-specific URLs (e.g., for "My Courses")
     path('users/me/enrolled-courses/', UserEnrolledCoursesView.as_view(), name='user-enrolled-courses'),
+    # Auth-related settings
+    path('auth/password/change/', PasswordChangeView.as_view(), name='auth-password-change'),
 ]
