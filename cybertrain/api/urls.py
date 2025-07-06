@@ -5,7 +5,8 @@ from .views import (
     EmailVerificationView,
     PasswordResetRequestView,
     PasswordResetConfirmView,
-    DashboardOverviewView  # Added
+    DashboardOverviewView,
+    CourseListView  # Added
 )
 from rest_framework_simplejwt.views import (
     TokenObtainPairView,
@@ -24,4 +25,6 @@ urlpatterns = [
     path('auth/password-reset/confirm/', PasswordResetConfirmView.as_view(), name='auth-password-reset-confirm'),
     # Dashboard URLs
     path('dashboard/overview/', DashboardOverviewView.as_view(), name='dashboard-overview'),
+    # Course URLs
+    path('courses/', CourseListView.as_view(), name='course-list'),
 ]

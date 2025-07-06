@@ -23,7 +23,8 @@ class AuthTests(APITestCase):
         self.password_reset_request_url = reverse('auth-password-reset-request')
         self.password_reset_confirm_url = reverse('auth-password-reset-confirm')
         self.current_user_url = reverse('auth-current-user')
-        self.dashboard_overview_url = reverse('dashboard-overview') # Added dashboard URL
+        self.dashboard_overview_url = reverse('dashboard-overview')
+        self.course_list_url = reverse('course-list') # Added course list URL
 
 
         self.user_data = {
@@ -381,6 +382,91 @@ class AuthTests(APITestCase):
     def test_dashboard_overview_unauthenticated(self):
         response = self.client.get(self.dashboard_overview_url, format='json')
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    # --- Course List Tests ---
+    def test_course_list_unauthenticated(self):
+        response = self.client.get(self.course_list_url, format='json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn('count', response.data)
+        self.assertIn('next', response.data)
+        self.assertIn('previous', response.data)
+        self.assertIn('results', response.data)
+
+        results = response.data['results']
+        self.assertIsInstance(results, list)
+        if results: # If there are courses in mock data
+            self.assertIn('id', results[0])
+            self.assertIn('title', results[0])
+            self.assertIn('slug', results[0])
+            self.assertIn('short_description', results[0])
+            self.assertIn('image_url', results[0])
+            self.assertIn('level', results[0])
+            self.assertIn('duration_display', results[0])
+            self.assertIn('enrolled_count', results[0])
+            self.assertIn('rating_avg', results[0])
+            self.assertIn('price_display', results[0])
+            self.assertIn('tags', results[0])
+            self.assertIn('instructor_name', results[0])
+            self.assertEqual(results[0]['is_enrolled'], False) # Should be false for unauthenticated
+
+    def test_course_list_authenticated_is_enrolled_simulation(self):
+        # Register, verify, and login 'testuser'
+        self.client.post(self.register_url, self.user_data, format='json')
+        user = get_latest_user()
+        user_profile = UserProfile.objects.get(user=user)
+        self.client.post(self.verify_email_url, {'token': str(user_profile.email_verification_token)}, format='json')
+        login_response = self.client.post(self.login_url, self.user_data_login, format='json')
+        access_token = login_response.data['access']
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {access_token}')
+
+        response = self.client.get(self.course_list_url, format='json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        results = response.data['results']
+        if results:
+            # Check the mock logic: 'uuid-course-1' should be enrolled for 'testuser'
+            course1 = next((c for c in results if c['id'] == 'uuid-course-1'), None)
+            if course1:
+                self.assertTrue(course1['is_enrolled'])
+
+            # Other courses should not be enrolled by default by the mock logic
+            course2 = next((c for c in results if c['id'] == 'uuid-course-2'), None)
+            if course2:
+                self.assertFalse(course2['is_enrolled'])
+
+    def test_course_list_filter_by_level(self):
+        response = self.client.get(self.course_list_url, {'level': 'Beginner'}, format='json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        results = response.data['results']
+        for course in results:
+            self.assertEqual(course['level'], 'Beginner')
+        # Check if count matches expected number of Beginner courses in mock data
+        # MOCK_COURSES_DB has 2 Beginner courses
+        self.assertEqual(response.data['count'], 2)
+
+    def test_course_list_search(self):
+        response = self.client.get(self.course_list_url, {'search': 'Network'}, format='json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        results = response.data['results']
+        for course in results:
+            self.assertTrue('Network'.lower() in course['title'].lower() or 'Network'.lower() in course['short_description'].lower())
+        # MOCK_COURSES_DB has 1 course with "Network" in title
+        self.assertEqual(response.data['count'], 1)
+        self.assertEqual(results[0]['id'], 'uuid-course-1')
+
+    def test_course_list_pagination(self):
+        # MOCK_COURSES_DB has 6 courses, StandardResultsSetPagination page_size is 6
+        response = self.client.get(self.course_list_url, format='json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data['results']), 6) # Should show all 6 on one page
+        self.assertIsNone(response.data['next']) # No next page as all fit
+
+        # If we had more courses, e.g., 7, and page_size was 3:
+        # self.assertEqual(len(response.data['results']), 3)
+        # self.assertIsNotNone(response.data['next'])
+        # response_page2 = self.client.get(response.data['next'], format='json')
+        # self.assertEqual(len(response_page2.data['results']), 3)
+        # ...and so on. Current mock data fits on one page.
+
 
 ```python
 # Small correction for test_user_registration_existing_username and email error checking:

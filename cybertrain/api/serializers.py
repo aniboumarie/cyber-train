@@ -77,3 +77,33 @@ class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = ('id', 'username', 'email', 'first_name', 'last_name', 'profile', 'is_active')
+
+
+class CourseSerializer(serializers.Serializer):
+    # Based on the API design for GET /api/courses/
+    id = serializers.CharField(read_only=True) # Using CharField for UUID or int PK for mocked data
+    title = serializers.CharField(max_length=255)
+    slug = serializers.SlugField(max_length=255)
+    short_description = serializers.CharField()
+    image_url = serializers.URLField(max_length=1024, allow_blank=True, required=False)
+    level = serializers.ChoiceField(choices=['Beginner', 'Intermediate', 'Advanced', 'All Levels']) # 'All Levels' can be a choice
+    duration_display = serializers.CharField(max_length=100)
+    enrolled_count = serializers.IntegerField(default=0)
+    rating_avg = serializers.FloatField(default=0.0)
+    price_display = serializers.CharField(max_length=50)
+    price_cents = serializers.IntegerField(default=0)
+    currency = serializers.CharField(max_length=3, default='USD')
+    tags = serializers.ListField(child=serializers.CharField(max_length=50), required=False, default=list)
+    instructor_name = serializers.CharField(max_length=255, allow_blank=True, required=False)
+    is_enrolled = serializers.BooleanField(default=False)
+
+    # Note: When using a real model, many of these would be derived from model fields directly
+    # class Meta:
+    #     model = Course # Replace with actual Course model
+    #     fields = [
+    #         'id', 'title', 'slug', 'short_description', 'image_url', 'level',
+    #         'duration_display', 'enrolled_count', 'rating_avg', 'price_display',
+    #         'price_cents', 'currency', 'tags', 'instructor_name', 'is_enrolled'
+    #     ]
+    #     # read_only_fields could include fields like 'enrolled_count', 'rating_avg' if calculated
+    #     # For tags, if it's a ManyToManyField, you might use SlugRelatedField or similar.
