@@ -10,9 +10,9 @@ from django.contrib.auth.tokens import default_token_generator
 from rest_framework import generics, status, permissions
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from rest_framework.pagination import PageNumberPagination # Added for pagination
+from rest_framework.pagination import PageNumberPagination
 
-from .serializers import RegisterSerializer, UserSerializer, CourseSerializer # Added CourseSerializer
+from .serializers import RegisterSerializer, UserSerializer, CourseSerializer, EnrolledCourseSerializer # Added EnrolledCourseSerializer
 from .models import UserProfile
 
 # --- Mock Data Store ---
@@ -524,3 +524,136 @@ class CourseListView(generics.ListAPIView):
 #             raise Http404("Course not found")
 #         self.check_object_permissions(self.request, obj) # Not strictly needed for AllowAny
 #         return obj
+
+
+MOCK_USER_ENROLLED_COURSES_DB = {
+    "testuser": [ # Assuming a user with username 'testuser'
+        {
+            "course_id": "uuid-course-1",
+            "enrollment_id": "enroll-A",
+            "title": "Network Security Fundamentals",
+            "slug": "network-security-fundamentals",
+            "short_description": "Your current focus for foundational network knowledge.",
+            "image_url": "/images/course-network-security.jpg",
+            "instructor_name": "Dr. Alice Secure",
+            "progress_percentage": 75,
+            "total_lessons_count": 20,
+            "completed_lessons_count": 15,
+            "next_lesson_title": "Firewall Configuration",
+            "next_lesson_slug": "firewall-configuration",
+            "status": "In Progress",
+            "user_time_spent_display": "12 hours",
+            "estimated_time_remaining_display": "4 hours remaining",
+            "course_player_url": "/courses/network-security-fundamentals/player/firewall-configuration",
+            "course_details_url": "/courses/network-security-fundamentals/",
+            "certificate_url": None,
+            "review_course_url": "/courses/network-security-fundamentals/review"
+        },
+        {
+            "course_id": "uuid-course-3",
+            "enrollment_id": "enroll-C",
+            "title": "Cybersecurity Awareness Training",
+            "slug": "cybersecurity-awareness-training",
+            "short_description": "Great job completing this essential training!",
+            "image_url": "/images/course-awareness.jpg",
+            "instructor_name": "Ms. Carol Vigilant",
+            "progress_percentage": 100,
+            "total_lessons_count": 12,
+            "completed_lessons_count": 12,
+            "next_lesson_title": "Course Completed!",
+            "next_lesson_slug": None,
+            "status": "Completed",
+            "user_time_spent_display": "6 hours",
+            "estimated_time_remaining_display": "Certificate earned",
+            "course_player_url": "/courses/cybersecurity-awareness-training/player/",
+            "course_details_url": "/courses/cybersecurity-awareness-training/",
+            "certificate_url": "/users/me/certificates/cert-awareness-123/",
+            "review_course_url": "/courses/cybersecurity-awareness-training/review"
+        }
+    ],
+    "anotheruser": [ # Example for a different user
+         {
+            "course_id": "uuid-course-2",
+            "enrollment_id": "enroll-B",
+            "title": "Ethical Hacking & Penetration Testing",
+            "slug": "ethical-hacking-penetration-testing",
+            "short_description": "Dive deep into ethical hacking.",
+            "image_url": "/images/course-ethical-hacking.jpg",
+            "instructor_name": "Mr. Bob Exploit",
+            "progress_percentage": 10,
+            "total_lessons_count": 25,
+            "completed_lessons_count": 2, # Corrected from 8 to be < total
+            "next_lesson_title": "Reconnaissance Techniques",
+            "next_lesson_slug": "reconnaissance-techniques",
+            "status": "In Progress",
+            "user_time_spent_display": "2 hours",
+            "estimated_time_remaining_display": "23 hours remaining",
+            "course_player_url": "/courses/ethical-hacking-penetration-testing/player/reconnaissance-techniques",
+            "course_details_url": "/courses/ethical-hacking-penetration-testing/",
+            "certificate_url": None,
+            "review_course_url": "/courses/ethical-hacking-penetration-testing/review"
+        }
+    ]
+}
+
+MOCK_USER_ENROLLED_COURSES_STATS = {
+    "testuser": {
+        "total_enrolled_courses": 2,
+        "average_progress_percentage": int((75 + 100) / 2), # (75+100)/2 = 87.5 -> 87
+        "total_hours_learned": 12 + 6 # 18
+    },
+    "anotheruser": {
+        "total_enrolled_courses": 1,
+        "average_progress_percentage": 10,
+        "total_hours_learned": 2
+    }
+}
+
+
+class UserEnrolledCoursesView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+    pagination_class = StandardResultsSetPagination # Use the same pagination class for consistency
+
+    def get(self, request, *args, **kwargs):
+        user = request.user
+
+        # Get mocked enrolled courses for the current user, default to empty list if user not in mock
+        user_enrolled_courses = MOCK_USER_ENROLLED_COURSES_DB.get(user.username, [])
+
+        # Get mocked summary stats for the current user
+        user_summary_stats = MOCK_USER_ENROLLED_COURSES_STATS.get(user.username, {
+            "total_enrolled_courses": 0,
+            "average_progress_percentage": 0,
+            "total_hours_learned": 0
+        })
+
+        # Paginate the list of courses
+        paginator = self.pagination_class()
+        paginated_courses = paginator.paginate_queryset(user_enrolled_courses, request, view=self)
+
+        # Serialize the paginated courses
+        serializer = EnrolledCourseSerializer(paginated_courses, many=True)
+
+        # Construct the final response
+        # paginator.get_paginated_response(serializer.data) gives {count, next, previous, results}
+        # We need to add our summary_stats to this.
+
+        paginated_response_data = {
+            'count': paginator.page.paginator.count,
+            'next': paginator.get_next_link(),
+            'previous': paginator.get_previous_link(),
+            'results': serializer.data
+        }
+
+        return Response({
+            "summary_stats": user_summary_stats,
+            "pagination": { # Manually constructing pagination details for the custom structure
+                "count": paginator.page.paginator.count,
+                "next": paginator.get_next_link(),
+                "previous": paginator.get_previous_link(),
+                "page_size": paginator.page_size,
+                "current_page": paginator.page.number,
+                "total_pages": paginator.page.paginator.num_pages
+            },
+            "results": serializer.data # This is what the frontend expects as 'results'
+        }, status=status.HTTP_200_OK)

@@ -6,7 +6,8 @@ from .views import (
     PasswordResetRequestView,
     PasswordResetConfirmView,
     DashboardOverviewView,
-    CourseListView  # Added
+    CourseListView,
+    UserEnrolledCoursesView  # Added
 )
 from rest_framework_simplejwt.views import (
     TokenObtainPairView,
@@ -27,4 +28,6 @@ urlpatterns = [
     path('dashboard/overview/', DashboardOverviewView.as_view(), name='dashboard-overview'),
     # Course URLs
     path('courses/', CourseListView.as_view(), name='course-list'),
+    # User-specific URLs (e.g., for "My Courses")
+    path('users/me/enrolled-courses/', UserEnrolledCoursesView.as_view(), name='user-enrolled-courses'),
 ]

@@ -107,3 +107,35 @@ class CourseSerializer(serializers.Serializer):
     #     ]
     #     # read_only_fields could include fields like 'enrolled_count', 'rating_avg' if calculated
     #     # For tags, if it's a ManyToManyField, you might use SlugRelatedField or similar.
+
+
+class EnrolledCourseSerializer(serializers.Serializer):
+    course_id = serializers.CharField() # Could be UUID or int
+    enrollment_id = serializers.CharField() # Could be UUID or int
+    title = serializers.CharField(max_length=255)
+    slug = serializers.SlugField(max_length=255)
+    short_description = serializers.CharField(required=False, allow_blank=True)
+    image_url = serializers.URLField(max_length=1024, allow_blank=True, required=False)
+    instructor_name = serializers.CharField(max_length=255, required=False, allow_blank=True)
+    progress_percentage = serializers.IntegerField(min_value=0, max_value=100)
+    total_lessons_count = serializers.IntegerField(min_value=0)
+    completed_lessons_count = serializers.IntegerField(min_value=0)
+    next_lesson_title = serializers.CharField(max_length=255, allow_blank=True, required=False, allow_null=True)
+    next_lesson_slug = serializers.SlugField(max_length=255, allow_blank=True, required=False, allow_null=True)
+    status = serializers.ChoiceField(choices=['Not Started', 'In Progress', 'Completed'])
+    user_time_spent_display = serializers.CharField(max_length=100, required=False, allow_blank=True)
+    estimated_time_remaining_display = serializers.CharField(max_length=100, required=False, allow_blank=True)
+    course_player_url = serializers.CharField(max_length=2048, required=False, allow_blank=True) # URLField might be too strict for relative paths
+    course_details_url = serializers.CharField(max_length=2048, required=False, allow_blank=True)
+    certificate_url = serializers.CharField(max_length=2048, allow_blank=True, required=False, allow_null=True)
+    review_course_url = serializers.CharField(max_length=2048, allow_blank=True, required=False, allow_null=True)
+
+    def validate_completed_lessons_count(self, value):
+        # Example validation: completed lessons cannot exceed total lessons
+        # This requires access to total_lessons_count, possible via initial_data if this is a write serializer
+        # For a read-serializer based on direct dict data, this type of validation is less common here
+        # and more about ensuring the data source is correct.
+        # For now, this is mostly for structure definition.
+        # if 'total_lessons_count' in self.initial_data and value > self.initial_data['total_lessons_count']:
+        #     raise serializers.ValidationError("Completed lessons cannot exceed total lessons.")
+        return value

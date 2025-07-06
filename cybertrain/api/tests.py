@@ -24,7 +24,8 @@ class AuthTests(APITestCase):
         self.password_reset_confirm_url = reverse('auth-password-reset-confirm')
         self.current_user_url = reverse('auth-current-user')
         self.dashboard_overview_url = reverse('dashboard-overview')
-        self.course_list_url = reverse('course-list') # Added course list URL
+        self.course_list_url = reverse('course-list')
+        self.user_enrolled_courses_url = reverse('user-enrolled-courses') # Added
 
 
         self.user_data = {
@@ -467,6 +468,107 @@ class AuthTests(APITestCase):
         # self.assertEqual(len(response_page2.data['results']), 3)
         # ...and so on. Current mock data fits on one page.
 
+    # --- User Enrolled Courses Tests ---
+    def test_user_enrolled_courses_unauthenticated(self):
+        response = self.client.get(self.user_enrolled_courses_url, format='json')
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_user_enrolled_courses_authenticated_testuser(self):
+        # Register, verify, and login 'testuser'
+        self.client.post(self.register_url, self.user_data, format='json')
+        user = get_latest_user() # This is 'testuser'
+        user_profile = UserProfile.objects.get(user=user)
+        self.client.post(self.verify_email_url, {'token': str(user_profile.email_verification_token)}, format='json')
+        login_response = self.client.post(self.login_url, self.user_data_login, format='json')
+        access_token = login_response.data['access']
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {access_token}')
+
+        response = self.client.get(self.user_enrolled_courses_url, format='json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        # Check overall structure
+        self.assertIn('summary_stats', response.data)
+        self.assertIn('pagination', response.data)
+        self.assertIn('results', response.data)
+
+        # Check summary_stats for 'testuser' (from MOCK_USER_ENROLLED_COURSES_STATS)
+        expected_stats = {
+            "total_enrolled_courses": 2,
+            "average_progress_percentage": 87, # int((75 + 100) / 2)
+            "total_hours_learned": 18
+        }
+        self.assertEqual(response.data['summary_stats'], expected_stats)
+
+        # Check pagination for 'testuser' (has 2 mocked enrolled courses)
+        self.assertEqual(response.data['pagination']['count'], 2)
+        self.assertEqual(len(response.data['results']), 2) # All fit on one page
+
+        # Check structure of one result item
+        if response.data['results']:
+            first_enrolled_course = response.data['results'][0]
+            self.assertEqual(first_enrolled_course['course_id'], 'uuid-course-1')
+            self.assertEqual(first_enrolled_course['title'], 'Network Security Fundamentals')
+            self.assertEqual(first_enrolled_course['progress_percentage'], 75)
+            self.assertEqual(first_enrolled_course['status'], 'In Progress')
+
+    def test_user_enrolled_courses_authenticated_anotheruser(self):
+        # Create and login 'anotheruser'
+        another_user_data = {'username': 'anotheruser', 'email': 'another@example.com', 'password': 'Password123!'}
+        # Simplified registration: directly create and activate user for this test
+        user = User.objects.create_user(
+            username=another_user_data['username'],
+            email=another_user_data['email'],
+            password=another_user_data['password'],
+            is_active=True # Activate directly for simplicity in this test
+        )
+        # UserProfile.objects.get_or_create(user=user) # Ensure profile exists
+
+        login_response = self.client.post(self.login_url, {'username': 'anotheruser', 'password': 'Password123!'}, format='json')
+        self.assertEqual(login_response.status_code, status.HTTP_200_OK, login_response.data) # Check if login successful
+        access_token = login_response.data['access']
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {access_token}')
+
+        response = self.client.get(self.user_enrolled_courses_url, format='json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        expected_stats = { # From MOCK_USER_ENROLLED_COURSES_STATS for 'anotheruser'
+            "total_enrolled_courses": 1,
+            "average_progress_percentage": 10,
+            "total_hours_learned": 2
+        }
+        self.assertEqual(response.data['summary_stats'], expected_stats)
+        self.assertEqual(response.data['pagination']['count'], 1)
+        self.assertEqual(len(response.data['results']), 1)
+        if response.data['results']:
+            self.assertEqual(response.data['results'][0]['course_id'], 'uuid-course-2') # Enrolled in Ethical Hacking
+
+    def test_user_enrolled_courses_authenticated_no_mock_data_user(self):
+        # Create and login a user not in MOCK_USER_ENROLLED_COURSES_DB
+        new_user_data = {'username': 'newuser', 'email': 'new@example.com', 'password': 'Password123!'}
+        user = User.objects.create_user(
+            username=new_user_data['username'],
+            email=new_user_data['email'],
+            password=new_user_data['password'],
+            is_active=True
+        )
+        # UserProfile.objects.get_or_create(user=user)
+
+        login_response = self.client.post(self.login_url, {'username': 'newuser', 'password': 'Password123!'}, format='json')
+        self.assertEqual(login_response.status_code, status.HTTP_200_OK)
+        access_token = login_response.data['access']
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {access_token}')
+
+        response = self.client.get(self.user_enrolled_courses_url, format='json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        expected_stats = { # Default stats if user not in mock
+            "total_enrolled_courses": 0,
+            "average_progress_percentage": 0,
+            "total_hours_learned": 0
+        }
+        self.assertEqual(response.data['summary_stats'], expected_stats)
+        self.assertEqual(response.data['pagination']['count'], 0)
+        self.assertEqual(len(response.data['results']), 0)
 
 ```python
 # Small correction for test_user_registration_existing_username and email error checking:
