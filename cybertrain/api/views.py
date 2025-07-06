@@ -237,3 +237,105 @@ class PasswordResetConfirmView(APIView):
 
         else:
             return Response({"error": "Invalid or expired password reset link."}, status=status.HTTP_400_BAD_REQUEST)
+
+
+class DashboardOverviewView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, *args, **kwargs):
+        user = request.user
+        user_name = user.first_name if user.first_name else user.username # Prefer first name
+
+        # Placeholder data - to be replaced with real data when models are implemented
+        dashboard_data = {
+            "user_name": user_name,
+            "stats": {
+                "enrolled_courses_count": 3,
+                "average_progress_percentage": 68,
+                "certificates_earned_count": 1,
+                "hours_learned": 24.5
+            },
+            "enrolled_courses": [
+                {
+                    "id": "course_mock_1",
+                    "title": "Network Security Fundamentals",
+                    "progress_percentage": 75,
+                    "next_lesson": {
+                        "title": "Firewall Configuration",
+                        "id": "lesson_mock_abc"
+                    },
+                    "time_left_estimate": "2 hours"
+                },
+                {
+                    "id": "course_mock_2",
+                    "title": "Ethical Hacking & Penetration Testing",
+                    "progress_percentage": 30,
+                    "next_lesson": {
+                        "title": "SQL Injection Techniques",
+                        "id": "lesson_mock_def"
+                    },
+                    "time_left_estimate": "8 hours"
+                },
+                {
+                    "id": "course_mock_3",
+                    "title": "Cybersecurity Awareness Training",
+                    "progress_percentage": 100,
+                    "next_lesson": None,
+                    "time_left_estimate": "Complete"
+                }
+            ],
+            "upcoming_quizzes": [
+                {
+                    "id": "quiz_mock_1",
+                    "course_title": "Network Security Fundamentals",
+                    "course_id": "course_mock_1",
+                    "due_date": "2024-08-15T23:59:59Z", # Example future date
+                    "questions_count": 15,
+                    "quiz_url": f"/courses/course_mock_1/quizzes/quiz_mock_1/start"
+                },
+                {
+                    "id": "quiz_mock_2",
+                    "course_title": "Incident Response & Forensics",
+                    "course_id": "course_mock_4",
+                    "due_date": "2024-08-18T23:59:59Z", # Example future date
+                    "questions_count": 20,
+                    "quiz_url": f"/courses/course_mock_4/quizzes/quiz_mock_2/start"
+                }
+            ],
+            "recent_activity": [
+                {
+                    "id": "activity_mock_1",
+                    "type": "lesson_completed",
+                    "description": "Completed \"Introduction to Cryptography\"",
+                    "timestamp": "2024-07-28T10:30:00Z",
+                    "related_item": {
+                        "type": "lesson",
+                        "id": "lesson_mock_crypto_intro",
+                        "title": "Introduction to Cryptography"
+                    }
+                },
+                {
+                    "id": "activity_mock_2",
+                    "type": "certificate_earned",
+                    "description": "Earned \"Ethical Hacking Essentials\" Certificate",
+                    "timestamp": "2024-07-27T15:00:00Z",
+                    "related_item": {
+                        "type": "certificate",
+                        "id": "cert_mock_ethics",
+                        "title": "Ethical Hacking Essentials"
+                    }
+                },
+                {
+                    "id": "activity_mock_3",
+                    "type": "course_enrollment",
+                    "description": "Started \"Cloud Security Basics\"",
+                    "timestamp": "2024-07-25T09:00:00Z",
+                    "related_item": {
+                        "type": "course",
+                        "id": "course_mock_cloud",
+                        "title": "Cloud Security Basics"
+                    }
+                }
+            ]
+        }
+        return Response(dashboard_data, status=status.HTTP_200_OK)

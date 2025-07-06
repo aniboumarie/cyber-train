@@ -23,6 +23,7 @@ class AuthTests(APITestCase):
         self.password_reset_request_url = reverse('auth-password-reset-request')
         self.password_reset_confirm_url = reverse('auth-password-reset-confirm')
         self.current_user_url = reverse('auth-current-user')
+        self.dashboard_overview_url = reverse('dashboard-overview') # Added dashboard URL
 
 
         self.user_data = {
@@ -331,6 +332,55 @@ class AuthTests(APITestCase):
         response = self.client.post(verify_url, {'token': 'invalidtoken'}, format='json')
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
         self.assertIn('token_not_valid', response.data['code'])
+
+    # --- Dashboard Overview Tests ---
+    def test_dashboard_overview_authenticated(self):
+        # 1. Register, verify, and login a user
+        self.client.post(self.register_url, self.user_data, format='json')
+        user = get_latest_user()
+        user.first_name = "Test" # Add first name for the test
+        user.last_name = "User"
+        user.save()
+
+        user_profile = UserProfile.objects.get(user=user)
+        self.client.post(self.verify_email_url, {'token': str(user_profile.email_verification_token)}, format='json')
+
+        login_response = self.client.post(self.login_url, self.user_data_login, format='json')
+        access_token = login_response.data['access']
+
+        # 2. Make authenticated request to dashboard overview
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {access_token}')
+        response = self.client.get(self.dashboard_overview_url, format='json')
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        # Check for user_name
+        self.assertEqual(response.data['user_name'], user.first_name)
+
+        # Check for top-level keys
+        expected_keys = ["user_name", "stats", "enrolled_courses", "upcoming_quizzes", "recent_activity"]
+        for key in expected_keys:
+            self.assertIn(key, response.data)
+
+        # Check structure of stats (since it's mocked but has a defined structure)
+        self.assertIn("enrolled_courses_count", response.data["stats"])
+        self.assertIn("average_progress_percentage", response.data["stats"])
+        self.assertIn("certificates_earned_count", response.data["stats"])
+        self.assertIn("hours_learned", response.data["stats"])
+
+        # Check if lists are present (even if mocked, they should be lists)
+        self.assertIsInstance(response.data["enrolled_courses"], list)
+        self.assertIsInstance(response.data["upcoming_quizzes"], list)
+        self.assertIsInstance(response.data["recent_activity"], list)
+
+        # Check a mocked item to ensure data consistency with frontend expectations
+        if response.data["enrolled_courses"]: # if not empty
+            self.assertIn("title", response.data["enrolled_courses"][0])
+            self.assertIn("progress_percentage", response.data["enrolled_courses"][0])
+
+    def test_dashboard_overview_unauthenticated(self):
+        response = self.client.get(self.dashboard_overview_url, format='json')
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
 
 ```python
 # Small correction for test_user_registration_existing_username and email error checking:
